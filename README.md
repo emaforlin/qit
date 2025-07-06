@@ -1,2 +1,3 @@
 # qit
-Light message queue system
+
+Lightweight message queue system
