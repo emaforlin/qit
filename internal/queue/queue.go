@@ -6,52 +6,54 @@ import (
 )
 
 const (
-	DefaultQueueCapacity    = 100 // default initial capacity of the message queue
 	DefaultMaxQueueCapacity = 200 // maximum capacity of the message queue
+	DefaultWokerCount       = 5   // default number of workers to process messages in the queue
 
 	// Error messages
 	EmptyQueueError = "queue is empty" // error message when trying to dequeue from an empty queue
 	FullQueueError  = "queue is full"  // error message when trying to enqueue to a full queue
 )
 
-type Message struct {
-	ID      string
-	Payload any
+type Queue struct {
+	wg       sync.WaitGroup
+	name     string
+	buffer   chan Message
+	workers  []*Worker
+	capacity int
 }
 
-type MessageQueue struct {
-	mu    sync.Mutex
-	queue []Message
-}
-
-func NewMessageQueue() *MessageQueue {
-	return &MessageQueue{
-		mu:    sync.Mutex{},
-		queue: make([]Message, 0, DefaultQueueCapacity),
+func NewQueue(name string, capacity, numWorkers int) *Queue {
+	q := &Queue{
+		name:     name,
+		buffer:   make(chan Message, capacity),
+		workers:  make([]*Worker, 0, numWorkers),
+		capacity: capacity,
 	}
+
+	for i := 0; i < numWorkers; i++ {
+		worker := NewWorker(i, q.buffer, &q.wg)
+		q.workers = append(q.workers, worker)
+		worker.Start()
+	}
+	return q
 }
 
 // Enqueue adds a message to the queue.
-func (mq *MessageQueue) Enqueue(msg Message) error {
-	mq.mu.Lock()
-	defer mq.mu.Unlock()
-
-	if len(mq.queue) >= DefaultMaxQueueCapacity {
+func (mq *Queue) Enqueue(msg Message) error {
+	select {
+	case mq.buffer <- msg:
+		return nil
+	default:
 		return errors.New(FullQueueError)
 	}
-
-	mq.queue = append(mq.queue, msg)
-	return nil
 }
 
-// Dequeue removes and returns the first (oldest) message from the queue.
-func (mq *MessageQueue) Dequeue() (Message, error) {
-	mq.mu.Lock()
-	defer mq.mu.Unlock()
-	if len(mq.queue) == 0 {
-		return Message{}, errors.New(EmptyQueueError)
-	}
-	msg := mq.queue[0]
-	mq.queue = mq.queue[1:]
-	return msg, nil
+// Close closes the queue and stops accepting new messages
+func (mq *Queue) Close() {
+	close(mq.buffer)
+}
+
+// Wait waits for all workers to finish processing their current messages
+func (mq *Queue) Wait() {
+	mq.wg.Wait()
 }
