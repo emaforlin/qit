@@ -10,8 +10,8 @@ const (
 	DefaultWokerCount       = 5   // default number of workers to process messages in the queue
 
 	// Error messages
-	EmptyQueueError = "queue is empty" // error message when trying to dequeue from an empty queue
-	FullQueueError  = "queue is full"  // error message when trying to enqueue to a full queue
+	EmptyQueueError = "queue is empty"
+	FullQueueError  = "queue is full"
 )
 
 type Queue struct {
